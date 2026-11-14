@@ -1,0 +1,71 @@
+name: Build Shohoj Vocab Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Generate Native Android Gradle Wrapper & Scaffold (Preserving lib & pubspec)
+        run: |
+          cp pubspec.yaml pubspec.yaml.bak
+          cp lib/main.dart lib/main.dart.bak
+          flutter create --org com.codehutbd.shohojvocab --project-name shohoj_vocab --platforms android .
+          mv pubspec.yaml.bak pubspec.yaml
+          mv lib/main.dart.bak lib/main.dart
+
+      - name: Configure AndroidManifest.xml Permissions & App Name (Shohoj Vocab)
+        run: |
+          python3 - << 'EOF'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p, encoding="utf-8").read()
+          if "android.permission.INTERNET" not in s:
+              s = s.replace("<application", '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
+          s = s.replace('android:label="shohoj_vocab"', 'android:label="Shohoj Vocab"')
+          open(p, "w", encoding="utf-8").write(s)
+          EOF
+
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Rename APK for Easy Download
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Shohoj-Vocab-by-Raz-Ahamed.apk
+
+      - name: Upload APK to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shohoj-Vocab-APK
+          path: Shohoj-Vocab-by-Raz-Ahamed.apk
+
+      - name: Publish APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Shohoj Vocab Android APK v1.0.${{ github.run_number }}"
+          files: Shohoj-Vocab-by-Raz-Ahamed.apk
